@@ -18,6 +18,7 @@ import { generateSkill, listImplementable, canGenerate } from "../lib/generator.
 import { hasLlmAvailable } from "../lib/llm.mjs";
 import { analyzeShellHistory } from "../lib/shell-analyzer.mjs";
 import { analyzeGitHistory } from "../lib/git-analyzer.mjs";
+import { analyzeBrowserHistory } from "../lib/browser-analyzer.mjs";
 import { loadConfig, initConfig, detectTelemetryDb } from "../lib/config.mjs";
 import { generateMcp } from "../lib/mcp-builder.mjs";
 
@@ -78,6 +79,10 @@ function runScan(days = 7) {
   // Git
   const git = analyzeGitHistory();
   if (git.suggestions.length) suggestions.push(...git.suggestions);
+
+  // Browser history
+  const browser = analyzeBrowserHistory(config.sourceConfigs?.browserHistoryPath);
+  if (browser.suggestions.length) suggestions.push(...browser.suggestions);
 
   // Deduplicate and sort
   const seen = new Set();

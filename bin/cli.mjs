@@ -17,6 +17,7 @@ import { generateSkill, listImplementable, canGenerate } from "../lib/generator.
 import { loadConfig, initConfig, detectTelemetryDb } from "../lib/config.mjs";
 import { analyzeShellHistory } from "../lib/shell-analyzer.mjs";
 import { analyzeGitHistory } from "../lib/git-analyzer.mjs";
+import { analyzeBrowserHistory } from "../lib/browser-analyzer.mjs";
 
 const args = process.argv.slice(2);
 const command = args[0] || "daily";
@@ -130,6 +131,12 @@ async function main() {
   const gitResult = analyzeGitHistory();
   if (gitResult.suggestions.length > 0) {
     suggestions.push(...gitResult.suggestions);
+  }
+
+  // 4. Browser history (Chrome, Arc, Brave, Edge)
+  const browserResult = analyzeBrowserHistory(config.sourceConfigs?.browserHistoryPath);
+  if (browserResult.suggestions.length > 0) {
+    suggestions.push(...browserResult.suggestions);
   }
 
   if (suggestions.length === 0) {
