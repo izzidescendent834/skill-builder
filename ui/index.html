@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>skill-builder</title>
+<style>
+  :root { --bg: #0d1117; --surface: #161b22; --border: #30363d; --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --green: #3fb950; --yellow: #d29922; --red: #f85149; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+
+  .container { max-width: 960px; margin: 0 auto; padding: 24px; }
+
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+  header h1 { font-size: 24px; font-weight: 600; }
+  header h1 span { color: var(--muted); font-weight: 400; }
+
+  nav { display: flex; gap: 4px; margin-bottom: 24px; }
+  nav button { background: none; border: 1px solid var(--border); color: var(--muted); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.15s; }
+  nav button:hover { color: var(--text); border-color: var(--muted); }
+  nav button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+  .card h3 { font-size: 15px; margin-bottom: 4px; }
+  .card .meta { color: var(--muted); font-size: 13px; }
+  .card .signal { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; }
+  .badge.high { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge.medium { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .badge.low { background: rgba(139,148,158,0.15); color: var(--muted); }
+  .badge.impl { background: rgba(88,166,255,0.15); color: var(--accent); margin-left: 6px; }
+
+  .btn { background: var(--accent); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .btn:hover { opacity: 0.9; }
+  .btn.secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+
+  pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; overflow-x: auto; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+  code { font-family: 'SF Mono', 'Fira Code', monospace; }
+
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px; font-family: inherit; }
+  .form-group textarea { min-height: 80px; resize: vertical; }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
+
+  .tool-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .tool-row input { flex: 1; }
+  .tool-row button { flex-shrink: 0; }
+
+  .preview-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 100; }
+  .preview-modal.open { display: flex; }
+  .preview-content { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 720px; width: 90%; max-height: 80vh; overflow-y: auto; }
+  .preview-content h2 { margin-bottom: 16px; }
+
+  .explainer { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+  .explainer h3 { color: var(--accent); margin-bottom: 8px; }
+  .explainer p { color: var(--muted); font-size: 14px; }
+  .explainer code { background: var(--bg); padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+
+  .empty { text-align: center; padding: 48px; color: var(--muted); }
+
+  #status { position: fixed; bottom: 16px; right: 16px; background: var(--green); color: #fff; padding: 8px 16px; border-radius: 6px; font-size: 13px; display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>skill-builder <span>— build what you repeat</span></h1>
+  </header>
+
+  <nav>
+    <button class="active" onclick="showPanel('suggestions')">Suggestions</button>
+    <button onclick="showPanel('skills')">Skill Builder</button>
+    <button onclick="showPanel('mcps')">MCP Builder</button>
+    <button onclick="showPanel('docs')">How It Works</button>
+  </nav>
+
+  <!-- SUGGESTIONS PANEL -->
+  <div id="suggestions" class="panel active">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <p style="color:var(--muted); font-size:14px;">Skills suggested from your shell history, desktop activity, and git patterns.</p>
+      <button class="btn secondary" onclick="loadSuggestions()">↻ Refresh</button>
+    </div>
+    <div id="suggestion-list"></div>
+  </div>
+
+  <!-- SKILL BUILDER PANEL -->
+  <div id="skills" class="panel">
+    <div class="explainer">
+      <h3>What's a Skill?</h3>
+      <p>A skill is a markdown file with instructions that your AI coding agent (Claude Code, Codex, Cursor) can execute as a slash command. Example: <code>/pr-dashboard</code> runs a script that checks all your repos for open PRs.</p>
+      <p style="margin-top:8px;">Skills live at <code>~/.claude/commands/</code> and are instantly available in your agent.</p>
+    </div>
+    <p style="color:var(--muted); font-size:14px; margin-bottom:16px;">Click "Preview" on any suggestion above to see the generated skill, or browse the built-in library:</p>
+    <div id="skill-library"></div>
+  </div>
+
+  <!-- MCP BUILDER PANEL -->
+  <div id="mcps" class="panel">
+    <div class="explainer">
+      <h3>What's an MCP Server?</h3>
+      <p>MCP (Model Context Protocol) lets your AI agent talk to external services — APIs, databases, SaaS tools. An MCP server exposes <strong>tools</strong> (actions the agent can take) and <strong>resources</strong> (data the agent can read).</p>
+      <p style="margin-top:8px;">Example: a Stripe MCP gives your agent <code>list_charges</code>, <code>create_refund</code> tools so it can manage payments directly.</p>
+    </div>
+
+    <div class="card">
+      <h3>Build an MCP Server</h3>
+      <div class="form-group">
+        <label>Service Name</label>
+        <input type="text" id="mcp-name" placeholder="e.g., stripe, jira, notion">
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <input type="text" id="mcp-desc" placeholder="e.g., Manage Stripe payments and subscriptions">
+      </div>
+      <div class="form-group">
+        <label>Base API URL</label>
+        <input type="text" id="mcp-url" placeholder="e.g., https://api.stripe.com/v1">
+      </div>
+      <div class="form-group">
+        <label>Auth Type</label>
+        <select id="mcp-auth">
+          <option value="api_key">API Key (env var)</option>
+          <option value="oauth">OAuth 2.0</option>
+          <option value="none">No auth</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>API Key Env Var Name</label>
+        <input type="text" id="mcp-env" placeholder="e.g., STRIPE_API_KEY">
+      </div>
+
+      <div class="form-group">
+        <label>Tools (actions your agent can take)</label>
+        <div id="mcp-tools">
+          <div class="tool-row">
+            <input type="text" placeholder="Tool name (e.g., list_charges)" class="tool-name">
+            <input type="text" placeholder="Description" class="tool-desc">
+            <button class="btn secondary" onclick="removeRow(this)">✕</button>
+          </div>
+        </div>
+        <button class="btn secondary" onclick="addToolRow()" style="margin-top:8px;">+ Add Tool</button>
+      </div>
+
+      <div class="form-group">
+        <label>Resources (data your agent can read)</label>
+        <div id="mcp-resources">
+          <div class="tool-row">
+            <input type="text" placeholder="Resource name (e.g., account)" class="res-name">
+            <input type="text" placeholder="Description" class="res-desc">
+            <button class="btn secondary" onclick="removeRow(this)">✕</button>
+          </div>
+        </div>
+        <button class="btn secondary" onclick="addResourceRow()" style="margin-top:8px;">+ Add Resource</button>
+      </div>
+
+      <button class="btn" onclick="generateMcp()" style="margin-top:8px;">Generate MCP Server</button>
+    </div>
+
+    <div id="mcp-output" style="margin-top:16px;"></div>
+  </div>
+
+  <!-- DOCS PANEL -->
+  <div id="docs" class="panel">
+    <div class="explainer">
+      <h3>How skill-builder works</h3>
+      <p>skill-builder reads data from three sources on your machine and finds patterns worth automating:</p>
+    </div>
+
+    <div class="card">
+      <h3>1. Shell History</h3>
+      <p class="meta">Reads <code>~/.zsh_history</code>, <code>~/.bash_history</code>, or fish history.</p>
+      <p style="margin-top:8px; color:var(--muted); font-size:14px;">Finds: repeated commands, command sequences (A then B then C), and parameterizable patterns (same command with different arguments).</p>
+      <p style="margin-top:8px; color:var(--muted); font-size:14px;"><strong>No setup needed.</strong> Works on any machine with a shell.</p>
+    </div>
+
+    <div class="card">
+      <h3>2. Desktop Telemetry</h3>
+      <p class="meta">Reads the <a href="https://cowork.ai" style="color:var(--accent);">Cowork.ai</a> SQLite database, or any compatible DB.</p>
+      <p style="margin-top:8px; color:var(--muted); font-size:14px;">Finds: heavy app usage, frequently visited URLs, context switches between apps, and repeated keystrokes.</p>
+      <p style="margin-top:8px; color:var(--muted); font-size:14px;"><strong>Optional.</strong> Install Cowork.ai for deeper analysis, or use the demo data generator.</p>
+    </div>
+
+    <div class="card">
+      <h3>3. Git History</h3>
+      <p class="meta">Reads commit history from repos on your machine.</p>
+      <p style="margin-top:8px; color:var(--muted); font-size:14px;">Finds: repeated commit message patterns, files that always change together (co-change analysis), and hot files that need frequent attention.</p>
+      <p style="margin-top:8px; color:var(--muted); font-size:14px;"><strong>Automatic.</strong> Detects git repos in common locations.</p>
+    </div>
+
+    <div class="card">
+      <h3>Skills vs MCPs</h3>
+      <p style="color:var(--muted); font-size:14px;">
+        <strong>Skills</strong> are instructions for your AI agent — markdown files that tell it how to do something. Think: recipes.<br><br>
+        <strong>MCP servers</strong> are live connections between your agent and external services — they give the agent new tools. Think: power tools.<br><br>
+        Use skills for workflows you repeat. Use MCPs for services you want your agent to access directly.
+      </p>
+    </div>
+
+    <div class="card">
+      <h3>The SKILL.md Format</h3>
+      <p style="color:var(--muted); font-size:14px;">Skills use the SKILL.md standard (supported by 30+ platforms including Claude Code, Codex, Cursor, Gemini CLI):</p>
+      <pre><code>---
+name: my-skill
+description: "When to trigger and what it does"
+---
+
+# My Skill
+
+Instructions for the agent go here.
+Bash commands, API calls, SQL queries — whatever gets the job done.
+
+```bash
+echo "This actually runs"
+```</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- Preview Modal -->
+<div id="preview-modal" class="preview-modal" onclick="if(event.target===this)closePreview()">
+  <div class="preview-content">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <h2 id="preview-title">Preview</h2>
+      <button class="btn secondary" onclick="closePreview()">Close</button>
+    </div>
+    <pre><code id="preview-code"></code></pre>
+  </div>
+</div>
+
+<div id="status"></div>
+
+<script>
+function showPanel(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function flash(msg) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 2000);
+}
+
+async function loadSuggestions() {
+  const list = document.getElementById('suggestion-list');
+  list.innerHTML = '<p style="color:var(--muted)">Loading...</p>';
+
+  try {
+    const res = await fetch('/api/suggestions?days=7');
+    const suggestions = await res.json();
+
+    if (!suggestions.length) {
+      list.innerHTML = '<div class="empty">No suggestions found. Run <code>node scripts/generate-demo-db.mjs</code> to try with demo data.</div>';
+      return;
+    }
+
+    list.innerHTML = suggestions.map(s => `
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <div>
+            <h3>${s.id} <span class="badge ${s.confidence}">${s.confidence}</span>${s.canImplement ? '<span class="badge impl">auto-build</span>' : ''}</h3>
+            <p class="meta">${s.description}</p>
+            <p class="signal">${s.signal} · ${s.source}</p>
+          </div>
+          ${s.canImplement ? `<button class="btn" onclick="previewSkill('${s.id}')">Preview</button>` : ''}
+        </div>
+      </div>
+    `).join('');
+
+    // Also populate skill library
+    const library = document.getElementById('skill-library');
+    const implementable = suggestions.filter(s => s.canImplement);
+    library.innerHTML = implementable.map(s => `
+      <div class="card">
+        <h3>${s.id}</h3>
+        <p class="meta">${s.description}</p>
+        <button class="btn" onclick="previewSkill('${s.id}')" style="margin-top:8px;">Preview Skill</button>
+      </div>
+    `).join('') || '<div class="empty">No implementable skills found in current data.</div>';
+  } catch (e) {
+    list.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+  }
+}
+
+async function previewSkill(id) {
+  try {
+    const res = await fetch('/api/implement', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id }) });
+    const result = await res.json();
+    document.getElementById('preview-title').textContent = id;
+    document.getElementById('preview-code').textContent = result.content || result.error || 'No implementation available';
+    document.getElementById('preview-modal').classList.add('open');
+  } catch (e) {
+    flash('Error: ' + e.message);
+  }
+}
+
+function closePreview() {
+  document.getElementById('preview-modal').classList.remove('open');
+}
+
+function addToolRow() {
+  const div = document.getElementById('mcp-tools');
+  const row = document.createElement('div');
+  row.className = 'tool-row';
+  row.innerHTML = '<input type="text" placeholder="Tool name" class="tool-name"><input type="text" placeholder="Description" class="tool-desc"><button class="btn secondary" onclick="removeRow(this)">✕</button>';
+  div.appendChild(row);
+}
+
+function addResourceRow() {
+  const div = document.getElementById('mcp-resources');
+  const row = document.createElement('div');
+  row.className = 'tool-row';
+  row.innerHTML = '<input type="text" placeholder="Resource name" class="res-name"><input type="text" placeholder="Description" class="res-desc"><button class="btn secondary" onclick="removeRow(this)">✕</button>';
+  div.appendChild(row);
+}
+
+function removeRow(btn) { btn.parentElement.remove(); }
+
+async function generateMcp() {
+  const tools = [...document.querySelectorAll('#mcp-tools .tool-row')].map(row => ({
+    name: row.querySelector('.tool-name').value,
+    description: row.querySelector('.tool-desc').value,
+  })).filter(t => t.name);
+
+  const resources = [...document.querySelectorAll('#mcp-resources .tool-row')].map(row => ({
+    name: row.querySelector('.res-name').value,
+    description: row.querySelector('.res-desc').value,
+  })).filter(r => r.name);
+
+  const spec = {
+    name: document.getElementById('mcp-name').value,
+    description: document.getElementById('mcp-desc').value,
+    baseUrl: document.getElementById('mcp-url').value,
+    authType: document.getElementById('mcp-auth').value,
+    authEnvVar: document.getElementById('mcp-env').value,
+    tools,
+    resources,
+  };
+
+  try {
+    const res = await fetch('/api/mcp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(spec) });
+    const result = await res.json();
+
+    const output = document.getElementById('mcp-output');
+    output.innerHTML = `
+      <h3 style="margin-bottom:12px;">Generated: ${result.name}-mcp/</h3>
+      ${Object.entries(result.files).map(([name, content]) => `
+        <div class="card">
+          <h3 style="font-family:monospace; font-size:14px;">${name}</h3>
+          <pre style="margin-top:8px;"><code>${escapeHtml(content)}</code></pre>
+        </div>
+      `).join('')}
+    `;
+    flash('MCP server generated');
+  } catch (e) {
+    flash('Error: ' + e.message);
+  }
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Load on start
+loadSuggestions();
+</script>
+</body>
+</html>

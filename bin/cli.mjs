@@ -31,6 +31,7 @@ function showHelp() {
   console.log(`skill-builder — Analyze your activity, build agent skills
 
 Commands:
+  ui                Open the web UI (skills + MCP builder + docs)
   init              Set up config at ~/.skill-builder/config.json
   suggest           Full ranked suggestion list from your activity
   daily             One new suggestion per day (no repeats)
@@ -54,6 +55,16 @@ Docs:   https://github.com/Scottpedia0/skill-builder`);
 async function main() {
   if (command === "--help" || command === "-h" || command === "help") {
     showHelp();
+    return;
+  }
+
+  // UI command — start local web server
+  if (command === "ui") {
+    const { fileURLToPath } = await import("url");
+    const { dirname } = await import("path");
+    const serverPath = join(dirname(fileURLToPath(import.meta.url)), "..", "ui", "server.mjs");
+    const { fork } = await import("child_process");
+    fork(serverPath);
     return;
   }
 
