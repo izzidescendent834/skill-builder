@@ -6,6 +6,24 @@ Has 15 built-in skills. If you add an API key, it uses an LLM to generate skills
 
 Built this in a day for our own use. If you find it useful, make it better.
 
+## Screenshots
+
+**Discovery** — patterns found across your data sources, ranked by confidence:
+
+![Discovery](screenshots/01-discovery.png)
+
+**Skill Builder** — preview and install skills with one click:
+
+![Skill Builder](screenshots/02-skill-builder.png)
+
+**MCP Builder** — generate complete MCP server projects from a form:
+
+![MCP Builder](screenshots/03-mcp-builder.png)
+
+**Connections** — plug in API keys and data sources:
+
+![Connections](screenshots/04-connections.png)
+
 ## Quick Start
 
 ```bash
