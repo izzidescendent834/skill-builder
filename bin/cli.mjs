@@ -15,6 +15,7 @@ import { openDb, analyzeAll } from "../lib/analyzer.mjs";
 import { generateSuggestions, dailyPick } from "../lib/suggester.mjs";
 import { generateSkill, listImplementable } from "../lib/generator.mjs";
 import { loadConfig, initConfig, detectTelemetryDb } from "../lib/config.mjs";
+import { analyzeShellHistory } from "../lib/shell-analyzer.mjs";
 
 const args = process.argv.slice(2);
 const command = args[0] || "daily";
@@ -91,26 +92,44 @@ async function main() {
   const days = parseInt(getFlag("--days") || String(config.defaultDays), 10);
   const cutoff = new Date(Date.now() - days * 86400000).toISOString();
 
-  // Find telemetry DB
+  // Collect suggestions from all available data sources
+  let suggestions = [];
+
+  // 1. Telemetry (Cowork.ai or compatible SQLite)
   const dbPath = config.telemetryDb || detectTelemetryDb();
-  if (!dbPath) {
-    console.error("No telemetry database found.");
-    console.error("Run: skill-builder init");
-    console.error("Then set telemetryDb in ~/.skill-builder/config.json");
+  if (dbPath) {
+    try {
+      const db = openDb(dbPath);
+      const patterns = analyzeAll(db, cutoff);
+      suggestions.push(...generateSuggestions(patterns));
+      db.close();
+    } catch (e) {
+      console.error(`Telemetry DB error: ${e.message}`);
+    }
+  }
+
+  // 2. Shell history (always available on any machine)
+  const shellResult = analyzeShellHistory();
+  if (shellResult.suggestions.length > 0) {
+    suggestions.push(...shellResult.suggestions);
+  }
+
+  if (suggestions.length === 0) {
+    console.error("No data sources found. Run: skill-builder init");
+    console.error("Or generate demo data: node scripts/generate-demo-db.mjs");
     process.exit(1);
   }
 
-  let db;
-  try {
-    db = openDb(dbPath);
-  } catch (e) {
-    console.error(e.message);
-    process.exit(1);
-  }
-
-  const patterns = analyzeAll(db, cutoff);
-  const suggestions = generateSuggestions(patterns);
-  db.close();
+  // Deduplicate by id and sort by confidence
+  const seenIds = new Set();
+  const confidenceOrder = { high: 0, medium: 1, low: 2 };
+  suggestions = suggestions
+    .filter((s) => {
+      if (seenIds.has(s.id)) return false;
+      seenIds.add(s.id);
+      return true;
+    })
+    .sort((a, b) => (confidenceOrder[a.confidence] ?? 3) - (confidenceOrder[b.confidence] ?? 3));
 
   const outputDir = config.skillDir;
   const canonicalDir = config.canonicalDir;

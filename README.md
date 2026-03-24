@@ -2,9 +2,11 @@
 
 > Analyze how you work. Build automations that actually run. One skill per day.
 
-Reads your desktop activity data and generates working slash-command skills for AI coding agents — Claude Code, Codex, Cursor, or anything that reads markdown.
+Watches how you work and builds custom automations for your AI coding agents — Claude Code, Codex, Cursor, or anything that reads markdown.
 
-Not templates. Not outlines. **Real bash, real API calls, real SQL** — or it doesn't ship.
+**skills.sh gives you a toolbox. skill-builder watches you work and builds the custom jigs for *your* workshop.**
+
+Works out of the box with just your shell history. Add desktop telemetry for deeper analysis.
 
 ## Try It in 60 Seconds
 
@@ -109,15 +111,15 @@ skill-builder list              # Show implementable skills
 
 ## Data Sources
 
-**Currently supported:**
-- [x] [Cowork.ai](https://cowork.ai) desktop telemetry (SQLite)
+**Works immediately:**
+- [x] **Shell history** (zsh, bash, fish) — finds repeated commands, sequences, parameterizable patterns
+- [x] [Cowork.ai](https://cowork.ai) desktop telemetry — app usage, URLs, context switches, keystrokes
 - [x] Demo/synthetic data for testing
 
 **Coming:**
-- [ ] macOS Screen Time (`/Library/Application Support/com.apple.ScreenTimeAgent/`)
 - [ ] Browser history (Chrome, Arc, Firefox)
-- [ ] Shell history (`~/.zsh_history`)
 - [ ] Git commit patterns
+- [ ] macOS Screen Time
 - [ ] Calendar events
 - [ ] Slack/Teams activity
 
