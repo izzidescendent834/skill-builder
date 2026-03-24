@@ -1,139 +1,270 @@
 #!/usr/bin/env node
 
 /**
- * Local UI server for skill-builder.
- * Serves the web UI and provides API endpoints for suggestions,
- * skill implementation, and MCP generation.
+ * skill-builder API server.
+ * Serves the backend API that the React frontend calls.
+ * Run alongside `npm run dev` in the ui/ directory.
  */
 
 import { createServer } from "http";
-import { readFileSync, existsSync } from "fs";
-import { join, dirname, extname } from "path";
+import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { homedir } from "os";
+
 import { openDb, analyzeAll } from "../lib/analyzer.mjs";
 import { generateSuggestions, dailyPick } from "../lib/suggester.mjs";
 import { generateSkill, listImplementable } from "../lib/generator.mjs";
 import { analyzeShellHistory } from "../lib/shell-analyzer.mjs";
 import { analyzeGitHistory } from "../lib/git-analyzer.mjs";
-import { loadConfig, detectTelemetryDb } from "../lib/config.mjs";
+import { loadConfig, initConfig, detectTelemetryDb } from "../lib/config.mjs";
 import { generateMcp } from "../lib/mcp-builder.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || "3456", 10);
+const CONFIG_PATH = join(homedir(), ".skill-builder/config.json");
+const SKILL_DIR = join(homedir(), ".claude/commands");
+const MCP_DIR = join(homedir(), "mcps");
 
-const MIME = {
-  ".html": "text/html",
-  ".css": "text/css",
-  ".js": "application/javascript",
-  ".json": "application/json",
-  ".svg": "image/svg+xml",
-};
+// ─── Config helpers ─────────────────────────────────────────────
 
-function getAllSuggestions(days = 7) {
-  const config = loadConfig();
+function readConfig() {
+  if (existsSync(CONFIG_PATH)) {
+    try { return JSON.parse(readFileSync(CONFIG_PATH, "utf-8")); }
+    catch { return {}; }
+  }
+  return {};
+}
+
+function writeConfig(updates) {
+  const current = readConfig();
+  const merged = { ...current, ...updates };
+  // Deep merge keys
+  if (updates.keys) merged.keys = { ...(current.keys || {}), ...updates.keys };
+  if (updates.sources) merged.sources = { ...(current.sources || {}), ...updates.sources };
+  if (updates.sourceConfigs) merged.sourceConfigs = { ...(current.sourceConfigs || {}), ...updates.sourceConfigs };
+  mkdirSync(dirname(CONFIG_PATH), { recursive: true });
+  writeFileSync(CONFIG_PATH, JSON.stringify(merged, null, 2));
+  return merged;
+}
+
+// ─── Suggestion cache ───────────────────────────────────────────
+
+let cachedSuggestions = null;
+let lastScanTime = null;
+
+function runScan(days = 7) {
+  const config = readConfig();
   const cutoff = new Date(Date.now() - days * 86400000).toISOString();
   let suggestions = [];
 
-  const dbPath = config.telemetryDb || detectTelemetryDb();
+  // Telemetry
+  const dbPath = config.telemetryDb || config.sourceConfigs?.telemetryDb || detectTelemetryDb();
   if (dbPath) {
     try {
       const db = openDb(dbPath);
       suggestions.push(...generateSuggestions(analyzeAll(db, cutoff)));
       db.close();
-    } catch {}
+    } catch (e) {
+      console.error("Telemetry error:", e.message);
+    }
   }
 
+  // Shell
   const shell = analyzeShellHistory();
   if (shell.suggestions.length) suggestions.push(...shell.suggestions);
 
+  // Git
   const git = analyzeGitHistory();
   if (git.suggestions.length) suggestions.push(...git.suggestions);
 
   // Deduplicate and sort
   const seen = new Set();
   const order = { high: 0, medium: 1, low: 2 };
-  return suggestions
+  suggestions = suggestions
     .filter((s) => { if (seen.has(s.id)) return false; seen.add(s.id); return true; })
     .sort((a, b) => (order[a.confidence] ?? 3) - (order[b.confidence] ?? 3));
+
+  // Enrich with canImplement and type
+  const implementable = listImplementable();
+  suggestions = suggestions.map((s) => ({
+    ...s,
+    name: s.id,
+    canImplement: implementable.includes(s.id),
+    type: s.source === "mcp" ? "mcp" : "skill",
+    aiAnalyzed: false, // TODO: wire AI analysis
+  }));
+
+  cachedSuggestions = suggestions;
+  lastScanTime = new Date().toISOString();
+  return suggestions;
 }
 
-function handleApi(req, res) {
-  const url = new URL(req.url, `http://localhost:${PORT}`);
+// ─── Installed skills ───────────────────────────────────────────
 
-  if (url.pathname === "/api/suggestions") {
-    const days = parseInt(url.searchParams.get("days") || "7", 10);
-    const suggestions = getAllSuggestions(days);
-    const implementable = listImplementable();
-    const enriched = suggestions.map((s) => ({
-      ...s,
-      canImplement: implementable.includes(s.id),
-    }));
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(enriched));
-    return true;
+function getInstalledSkills() {
+  if (!existsSync(SKILL_DIR)) return [];
+  return readdirSync(SKILL_DIR)
+    .filter((f) => f.endsWith(".md"))
+    .map((f) => {
+      const path = join(SKILL_DIR, f);
+      const content = readFileSync(path, "utf-8");
+      return {
+        id: f.replace(".md", ""),
+        name: f.replace(".md", ""),
+        path,
+        installDate: new Date().toISOString(), // TODO: get actual mtime
+        code: content,
+      };
+    });
+}
+
+// ─── HTTP Server ────────────────────────────────────────────────
+
+function parseBody(req) {
+  return new Promise((resolve) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try { resolve(JSON.parse(body)); }
+      catch { resolve({}); }
+    });
+  });
+}
+
+function json(res, data, status = 200) {
+  res.writeHead(status, {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  });
+  res.end(JSON.stringify(data));
+}
+
+const server = createServer(async (req, res) => {
+  // CORS preflight
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    });
+    res.end();
+    return;
   }
 
-  if (url.pathname === "/api/implement" && req.method === "POST") {
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
-    req.on("end", () => {
-      const { id } = JSON.parse(body);
-      const config = loadConfig();
-      const suggestions = getAllSuggestions();
+  const url = new URL(req.url, `http://localhost:${PORT}`);
+  const path = url.pathname;
+
+  try {
+    // Health
+    if (path === "/api/health") {
+      return json(res, { ok: true, lastScan: lastScanTime });
+    }
+
+    // Config
+    if (path === "/api/config" && req.method === "GET") {
+      return json(res, readConfig());
+    }
+    if (path === "/api/config" && req.method === "POST") {
+      const body = await parseBody(req);
+      return json(res, writeConfig(body));
+    }
+
+    // Scan
+    if (path === "/api/scan" && req.method === "POST") {
+      const days = parseInt(url.searchParams.get("days") || "7", 10);
+      const suggestions = runScan(days);
+      return json(res, { ok: true, count: suggestions.length, lastScan: lastScanTime });
+    }
+
+    // Suggestions
+    if (path === "/api/suggestions") {
+      const days = parseInt(url.searchParams.get("days") || "7", 10);
+      if (!cachedSuggestions) runScan(days);
+      return json(res, cachedSuggestions);
+    }
+
+    // Implement (preview)
+    if (path === "/api/implement" && req.method === "POST") {
+      const { id } = await parseBody(req);
+      const config = readConfig();
+      const suggestions = cachedSuggestions || runScan();
       const target = suggestions.find((s) => s.id === id) || { id, signal: "manual", source: "url_pattern", confidence: "high", description: "" };
       const result = generateSkill(target, { dryRun: true, config });
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(result || { error: "No implementation available" }));
-    });
-    return true;
-  }
+      if (!result) return json(res, { error: "No implementation available" }, 404);
+      return json(res, result);
+    }
 
-  if (url.pathname === "/api/mcp" && req.method === "POST") {
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
-    req.on("end", () => {
-      const spec = JSON.parse(body);
+    // Save/install skill
+    if (path === "/api/skills/save" && req.method === "POST") {
+      const { id, content } = await parseBody(req);
+      mkdirSync(SKILL_DIR, { recursive: true });
+      const filePath = join(SKILL_DIR, `${id}.md`);
+      writeFileSync(filePath, content);
+      return json(res, { ok: true, path: filePath });
+    }
+
+    // Installed skills
+    if (path === "/api/installed" && req.method === "GET") {
+      return json(res, getInstalledSkills());
+    }
+
+    // Uninstall
+    if (path.startsWith("/api/installed/") && req.method === "DELETE") {
+      const id = path.split("/").pop();
+      const filePath = join(SKILL_DIR, `${id}.md`);
+      if (existsSync(filePath)) unlinkSync(filePath);
+      return json(res, { ok: true });
+    }
+
+    // MCP generate
+    if (path === "/api/mcp" && req.method === "POST") {
+      const spec = await parseBody(req);
       const result = generateMcp(spec);
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(result));
-    });
-    return true;
+      return json(res, result);
+    }
+
+    // MCP save to disk
+    if (path === "/api/mcp/save" && req.method === "POST") {
+      const spec = await parseBody(req);
+      const result = generateMcp(spec);
+      const dir = join(MCP_DIR, result.name);
+      mkdirSync(dir, { recursive: true });
+      for (const [filename, content] of Object.entries(result.files)) {
+        writeFileSync(join(dir, filename), content);
+      }
+      return json(res, { ok: true, path: dir });
+    }
+
+    // MCP add to Claude Code config
+    if (path === "/api/config/mcp" && req.method === "POST") {
+      const { name } = await parseBody(req);
+      const settingsPath = join(homedir(), ".claude/settings.json");
+      let settings = {};
+      if (existsSync(settingsPath)) {
+        try { settings = JSON.parse(readFileSync(settingsPath, "utf-8")); }
+        catch {}
+      }
+      if (!settings.mcpServers) settings.mcpServers = {};
+      settings.mcpServers[name] = {
+        command: "node",
+        args: [join(MCP_DIR, name, "server.mjs")],
+      };
+      writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+      return json(res, { ok: true });
+    }
+
+    json(res, { error: "Not found" }, 404);
+  } catch (e) {
+    console.error(e);
+    json(res, { error: e.message }, 500);
   }
-
-  return false;
-}
-
-const server = createServer((req, res) => {
-  // API routes
-  if (req.url.startsWith("/api/")) {
-    if (handleApi(req, res)) return;
-    res.writeHead(404);
-    res.end("Not found");
-    return;
-  }
-
-  // Static files
-  let filePath = req.url === "/" ? "/index.html" : req.url;
-  const fullPath = join(__dirname, filePath);
-
-  if (!existsSync(fullPath)) {
-    res.writeHead(404);
-    res.end("Not found");
-    return;
-  }
-
-  const ext = extname(fullPath);
-  res.writeHead(200, { "Content-Type": MIME[ext] || "text/plain" });
-  res.end(readFileSync(fullPath));
 });
 
-server.listen(PORT, async () => {
-  console.log(`skill-builder UI: http://localhost:${PORT}`);
+server.listen(PORT, () => {
+  console.log(`skill-builder API: http://localhost:${PORT}`);
+  console.log(`Start the UI: cd ui && npm run dev`);
   console.log("Press Ctrl+C to stop\n");
-
-  // Auto-open in browser
-  try {
-    const { exec } = await import("child_process");
-    exec(`open http://localhost:${PORT}`);
-  } catch {}
 });
