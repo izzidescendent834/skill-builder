@@ -19,6 +19,7 @@ import { hasLlmAvailable } from "../lib/llm.mjs";
 import { analyzeShellHistory } from "../lib/shell-analyzer.mjs";
 import { analyzeGitHistory } from "../lib/git-analyzer.mjs";
 import { analyzeBrowserHistory } from "../lib/browser-analyzer.mjs";
+import { analyzeClaudeThreads } from "../lib/claude-thread-analyzer.mjs";
 import { loadConfig, initConfig, detectTelemetryDb } from "../lib/config.mjs";
 import { generateMcp } from "../lib/mcp-builder.mjs";
 
@@ -83,6 +84,10 @@ function runScan(days = 7) {
   // Browser history
   const browser = analyzeBrowserHistory(config.sourceConfigs?.browserHistoryPath);
   if (browser.suggestions.length) suggestions.push(...browser.suggestions);
+
+  // Claude Code conversation threads
+  const claude = analyzeClaudeThreads();
+  if (claude.suggestions.length) suggestions.push(...claude.suggestions);
 
   // Deduplicate and sort
   const seen = new Set();

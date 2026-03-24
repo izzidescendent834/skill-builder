@@ -18,6 +18,7 @@ import { loadConfig, initConfig, detectTelemetryDb } from "../lib/config.mjs";
 import { analyzeShellHistory } from "../lib/shell-analyzer.mjs";
 import { analyzeGitHistory } from "../lib/git-analyzer.mjs";
 import { analyzeBrowserHistory } from "../lib/browser-analyzer.mjs";
+import { analyzeClaudeThreads } from "../lib/claude-thread-analyzer.mjs";
 
 const args = process.argv.slice(2);
 const command = args[0] || "daily";
@@ -137,6 +138,12 @@ async function main() {
   const browserResult = analyzeBrowserHistory(config.sourceConfigs?.browserHistoryPath);
   if (browserResult.suggestions.length > 0) {
     suggestions.push(...browserResult.suggestions);
+  }
+
+  // 5. Claude Code conversation threads
+  const claudeResult = analyzeClaudeThreads(days);
+  if (claudeResult.suggestions.length > 0) {
+    suggestions.push(...claudeResult.suggestions);
   }
 
   if (suggestions.length === 0) {
