@@ -25,7 +25,36 @@ function getFlag(name) {
   return idx >= 0 && idx + 1 < args.length ? args[idx + 1] : null;
 }
 
+function showHelp() {
+  console.log(`skill-builder — Analyze your activity, build agent skills
+
+Commands:
+  init              Set up config at ~/.skill-builder/config.json
+  suggest           Full ranked suggestion list from your activity
+  daily             One new suggestion per day (no repeats)
+  implement <id>    Build and install a skill
+  list              Show skills with working implementations
+
+Options:
+  --days N          Analysis window (default: 3)
+  --dry-run         Preview without installing
+  --help            Show this help
+
+Examples:
+  skill-builder suggest --days 7
+  skill-builder implement pr-dashboard --dry-run
+  skill-builder implement credential-audit
+
+Config: ~/.skill-builder/config.json
+Docs:   https://github.com/Scottpedia0/skill-builder`);
+}
+
 async function main() {
+  if (command === "--help" || command === "-h" || command === "help") {
+    showHelp();
+    return;
+  }
+
   // Init command doesn't need DB
   if (command === "init") {
     const result = initConfig();
@@ -137,7 +166,7 @@ async function main() {
       const fakeSuggestion = { id: targetId, signal: "manual", source: "url_pattern", confidence: "high", description: "" };
       const target = suggestions.find((s) => s.id === targetId) || fakeSuggestion;
 
-      const result = generateSkill(target, { outputDir, brainDir: canonicalDir, dryRun });
+      const result = generateSkill(target, { outputDir, brainDir: canonicalDir, dryRun, config });
       if (!result) {
         const available = listImplementable();
         console.error(`No working implementation for '${targetId}'.`);
