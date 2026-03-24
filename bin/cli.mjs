@@ -16,6 +16,7 @@ import { generateSuggestions, dailyPick } from "../lib/suggester.mjs";
 import { generateSkill, listImplementable } from "../lib/generator.mjs";
 import { loadConfig, initConfig, detectTelemetryDb } from "../lib/config.mjs";
 import { analyzeShellHistory } from "../lib/shell-analyzer.mjs";
+import { analyzeGitHistory } from "../lib/git-analyzer.mjs";
 
 const args = process.argv.slice(2);
 const command = args[0] || "daily";
@@ -112,6 +113,12 @@ async function main() {
   const shellResult = analyzeShellHistory();
   if (shellResult.suggestions.length > 0) {
     suggestions.push(...shellResult.suggestions);
+  }
+
+  // 3. Git history (if in a repo or repos configured)
+  const gitResult = analyzeGitHistory();
+  if (gitResult.suggestions.length > 0) {
+    suggestions.push(...gitResult.suggestions);
   }
 
   if (suggestions.length === 0) {
